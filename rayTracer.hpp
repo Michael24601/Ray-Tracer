@@ -16,6 +16,8 @@
 #include "openglUtil/glfwWindowWrapper.hpp"
 #include "openglUtil/shader.hpp"
 #include "openglUtil/vertexBuffer.hpp"
+#include "openglUtil/shaderStorageBuffer.hpp"
+#include "openglUtil/uniformBuffer.hpp"
 
 
 void runRayTracer(){
@@ -47,6 +49,61 @@ void runRayTracer(){
     */
     shader.setUniform("camera_pos", glm::vec3(0, 0, -2));
     shader.setUniform("aspect_ratio", aspectRatio);
+
+    std::vector<float> cubeTrianglesPadded = {
+        -0.5, -0.5, -0.5, 0.0,
+        0.5, -0.5, -0.5, 0.0,
+        0.5,  0.5, -0.5, 0.0,
+
+        0.5,  0.5, -0.5, 0.0,
+        -0.5,  0.5, -0.5, 0.0,
+        -0.5, -0.5, -0.5, 0.0,
+
+        0.5, -0.5,  0.5, 0.0,
+        -0.5, -0.5,  0.5, 0.0,
+        -0.5,  0.5,  0.5, 0.0,
+
+        -0.5,  0.5,  0.5, 0.0,
+        0.5,  0.5,  0.5, 0.0,
+        0.5, -0.5,  0.5, 0.0,
+
+        -0.5, -0.5,  0.5, 0.0,
+        -0.5, -0.5, -0.5, 0.0,
+        -0.5,  0.5, -0.5, 0.0,
+
+        -0.5,  0.5, -0.5, 0.0,
+        -0.5,  0.5,  0.5, 0.0,
+        -0.5, -0.5,  0.5, 0.0,
+
+        0.5, -0.5, -0.5, 0.0,
+        0.5, -0.5,  0.5, 0.0,
+        0.5,  0.5,  0.5, 0.0,
+
+        0.5,  0.5,  0.5, 0.0,
+        0.5,  0.5, -0.5, 0.0,
+        0.5, -0.5, -0.5, 0.0,
+
+        -0.5, -0.5,  0.5, 0.0,
+        0.5, -0.5,  0.5, 0.0,
+        0.5, -0.5, -0.5, 0.0,
+
+        0.5, -0.5, -0.5, 0.0,
+        -0.5, -0.5, -0.5, 0.0,
+        -0.5, -0.5,  0.5, 0.0,
+
+        0.5,  0.5, -0.5, 0.0,
+        -0.5,  0.5, -0.5, 0.0,
+        0.5,  0.5,  0.5, 0.0,
+
+        -0.5,  0.5,  0.5, 0.0,
+        0.5,  0.5,  0.5, 0.0,
+        -0.5,  0.5, -0.5, 0.0
+    };
+
+    UBOBuffer buffer;
+    buffer.allocate(cubeTrianglesPadded.size() * sizeof(float), GL_STATIC_DRAW);
+    buffer.uploadData(cubeTrianglesPadded);
+    buffer.bindToBindingPoint(0);
 
     // This is just a texture, used to save the output and then
     // display it. We can't directly display teh output because we need

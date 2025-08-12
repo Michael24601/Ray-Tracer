@@ -22,37 +22,20 @@ uniform int pass;
 
 #define PI 3.14159265358979323846
 #define EPSILON 1e-6
-#define SCENE_SIZE 14
+#define SCENE_SIZE 4
 #define LIMIT 999999
-#define SAMPLE_COUNT 16
+#define SAMPLE_COUNT 32
 #define BOUNCE_COUNT 4
-// Amount of base light added to all objects to avoid black objects
-#define AMBIENT_LIGHT 0.025
-
 #define ENABLE_ANTI_ALIASING true
-#define USE_AVERAGE true
 
 
 //===============================||  OBJECTS  ||==============================//
 
 
-// A triangle
-struct Triangle {
-    // We assume that the vertices are given in the counter clockwise
-    // order.
-    vec3 v0;
-    vec3 v1;
-    vec3 v2;
-    // Area, in case we want it saved to avoid recalculations.
-    float area;
-    // Optional parameters, in case the normals used at each
-    // vertex are different from the face normal.
-    // Assumed to be normalized.
-    vec3 n0;
-    vec3 n1;
-    vec3 n2;
-
-    // Graphics data fields
+// A sphere
+struct Sphere {
+    vec3 center;
+    float radius;
     vec3 color;
     bool is_light_source;
     float roughness;
@@ -60,26 +43,7 @@ struct Triangle {
 };
 
 
-// A plane, which can be written parametrically as
-// alpha * dir1 + beta * dir2 + point on plane, where the
-// directions are linearly independent.
-struct Plane_parametric {
-    vec3 dir1;
-    vec3 dir2;
-    vec3 point;
-};
-
-
-// A plane can also implicitey be defined as n . (p - q) = 0 where 
-// q is a point on the plane, and n is 
-// the normal = normalize(dir1 cross dir2).
-struct Plane_implicit{
-    vec3 normal;
-    vec3 point;
-};
-
-
-// A ray, given parametrically as r(t) = o + td
+// A ray
 struct Ray {
     // The direction of the ray must always be normalized.
     vec3 dir;
@@ -107,158 +71,63 @@ struct Bounce_data{
 };
 
 
-//==========================|| CHANGE OF MEASURE ||===========================//
-
-
-// Returns the triangle normal.
-// This assumes that the triangle's vertices are given in the counter
-// clockwise order.
-vec3 triangle_normal(Triangle triangle, vec3 point) {
-    vec3 a = triangle.v1 - triangle.v0;
-    vec3 b = triangle.v2 - triangle.v0;
-    return normalize(cross(a, b));
-}
-
-
-// Returns the triangle surface area
-float triangle_area(Triangle triangle) {
-    vec3 a = triangle.v1 - triangle.v0;
-    vec3 b = triangle.v2 - triangle.v0;
-    return 0.5 * length(cross(a, b));
-}
-
-
-// Generates a point on a triangle using parameters between 0 and 1.
-// We can do that by generating a random point inside the parallelogram
-// defined by (v1 - v0) and (v2 - v0), and the folding the other triangle
-// in to avoid points not in the triangle (for u + v <= 1).
-vec3 triangle_transform(Triangle triangle, float u, float v){
-    vec3 a = triangle.v1 - triangle.v0;
-    vec3 b = triangle.v2 - triangle.v0;
-    if(u+v > 1){
-        return (1 - u) * a + (1 - v) * b + triangle.v0;
-    }
-    else{
-        return u * a + v * b + triangle.v0;
-    }
-}
-
-
-// The change of measure term, or sqrt(det(J^TJ)) where J is the
-// Jacobian matrix of the transformation, is twice the surface
-// area of the triangle.
-// Note that it actually does not depend on u and v.
-float change_of_measure(Triangle triangle, float u, float v){
-    // If the area is set and defined already, we don't
-    // recompute it.
-    if(triangle.area > 0.0){
-        return 2.0 * triangle.area;
-    }
-    else{
-        return 2.0 * triangle_area(triangle);
-    }
-}
-
-
 //==============================||  COLLISIONS  ||============================//
 
 
-// Checks for an intersection between a ray and a plane.
-// The plane is parametric: alpha * t1 + beta * t2 + point on plane.
-// So to find the intersection we set:
-// alpha * t1 + beta * t2 + point on plane = dt + o
-// alpha * t1 + beta * t2 -dt = o - point on plane
-// [t1 t2 -d][alpha, beta, t] = o - point on plane
-// which is a linear system we can solve.
-// Also returns the parameters alpha and beta of the intersection.
-Ray_hit ray_plane_intersection(
-    Plane_parametric plane, Ray ray, 
-    inout vec2 parameters
+// Sphere (implict) and ray (parametric) intersection.
+// Leads to a quadratic; if there are one or more than one real 
+// and positive solutions are found then we have a hit.
+// If two hits are found, we return the closer one (smaller positive t).
+Ray_hit ray_sphere_intersection(
+    Sphere sphere,
+    Ray ray
 ){
-
     Ray_hit result;
-    mat3 matrix = mat3(plane.dir1, plane.dir2, -ray.dir);
-    vec3 b = ray.origin - plane.point;
-
-    // First we check if there even is an intersection
-    if (abs(determinant(matrix)) > EPSILON){
-        vec3 v = inverse(matrix) * b;
-        float t = v.z;
-        if(t > 0){
-            result.hit = true;
-            result.coordinate = ray.dir * t + ray.origin;
-            result.t = t;
-            parameters.x = v.x;
-            parameters.y = v.y;
-            return result;
-        }
-    }
-
     result.hit = false;
-    return result;
-}
 
-
-// Checks for an intersection between a ray and a plane,
-// this time given as an implicit equation.
-// This is easier and in fact much faster, as we can simply
-// solve for t in n . (r(t) - q) = 0.
-// Where we will find that t = n . (q - o) / n . d.
-// However, we don't automatically get the coordinates
-// of the intersection in the plane basis, that is, the
-// parameters alpha and beta that multiply the two directions dir1
-// and dir2, which we will be needing.
-Ray_hit ray_plane_intersection(Plane_implicit plane, Ray ray){
+    float a = dot(ray.dir, ray.dir);
+    float b = 2 * dot(ray.dir, (ray.origin - sphere.center));
+    float c = dot(ray.origin - sphere.center, ray.origin - sphere.center) 
+        - sphere.radius * sphere.radius;
+    float discriminant = b*b - 4*a*c;
     
-    Ray_hit result;
-    float denominator = dot(plane.normal, ray.dir);
-    float numerator = dot(plane.normal, plane.point - ray.origin);
-
-    // This means there is no intersection or the whole plane
-    // is an intersection, since the normal of the plane and
-    // direction are orthogonal (the plane and ray are parallel).
-    if(abs(denominator) > EPSILON){
-        float t = numerator / denominator;
+    // If discriminant is equal to 0, or close enough to 0
+    if (abs(discriminant) < EPSILON){
+        float t = -b / (2*a);
         if(t > 0){
-            result.hit = true;
             result.coordinate = ray.dir * t + ray.origin;
+            result.hit = true;
             result.t = t;
-            return result;
+        }
+    }
+    else if (discriminant > 0){
+        // We check the closer one first, then the further one only
+        // if the closer one fails.
+        float t = (-b - sqrt(discriminant))/ (2*a);
+        if(t >= 0){
+            result.coordinate = ray.dir * t + ray.origin;
+            result.hit = true;
+            result.t = t;
+        }
+        else{
+            // If not check the further one
+            t = (-b + sqrt(discriminant))/ (2*a);
+            if(t >= 0){
+                result.coordinate = ray.dir * t + ray.origin;
+                result.hit = true;
+                result.t = t;
+            }
         }
     }
 
-    result.hit = false;
     return result;
-}
-
-
-// Intersects a triangle with a ray
-Ray_hit ray_triangle_intersection(Triangle triangle, Ray ray){
-    Plane_parametric plane;
-    plane.dir1 = (triangle.v1 - triangle.v0);
-    plane.dir2 = (triangle.v2 - triangle.v0);
-    plane.point = triangle.v0;
-
-    // The point of intersection in the basis dir1 dir2;
-    vec2 parameters;
-    Ray_hit hit = ray_plane_intersection(plane, ray, parameters);
-    if(hit.hit){
-        if(parameters.x > 0.0 && parameters.y > 0.0
-        && parameters.x + parameters.y < 1.0){
-            return hit;
-        }
-    }
-    
-    Ray_hit false_hit;
-    false_hit.hit = false;
-    return false_hit;
 }
 
 
 // A funtion that casts a ray into the scene, and returns the closest
 // intersection.
 Ray_hit ray_tracing_function(
-    inout Triangle scene[SCENE_SIZE],
+    inout Sphere scene[SCENE_SIZE],
     Ray ray
 ) {
     Ray_hit hit;
@@ -267,7 +136,7 @@ Ray_hit ray_tracing_function(
     
     for(int i = 0; i < SCENE_SIZE; i++){
 
-        Ray_hit hit_temp = ray_triangle_intersection(scene[i], ray);
+        Ray_hit hit_temp = ray_sphere_intersection(scene[i], ray);
         hit_temp.index = i;
 
         // If there is a hit, and the hit occurs before reaching y
@@ -281,6 +150,56 @@ Ray_hit ray_tracing_function(
 }
 
 
+//==========================|| CHANGE OF MEASURE ||===========================//
+
+
+// Returns the sphere normal, assuming the point is on the sphere
+vec3 sphere_normal(Sphere sphere, vec3 point) {
+    return normalize(point - sphere.center);
+}
+
+
+// Returns the sphere surface area
+float sphere_area(Sphere sphere) {
+    return 4 * PI * sphere.radius * sphere.radius;
+}
+
+
+// Generates a point on a sphere using parameters between 0 and 1.
+vec3 sphere_transform(Sphere sphere, float u, float v){
+    return  sphere.center + sphere.radius * vec3(
+        sin(PI * u) * cos(2 * PI * v),
+        sin(PI * u) * sin(2 * PI * v),
+        cos(PI * u)
+    );
+}
+
+
+// The change of measure term, or sqrt(det(J^TJ)) where J is the
+// Jacobian matrix of the transformation.
+float change_of_measure(Sphere sphere, float u, float v){
+    return 2 * PI * PI * sphere.radius * sphere.radius * sin(PI * u);
+}
+
+
+// The inverse transform, that takes a point in and returns two
+// parameters u and v between 0 and 1.
+vec2 get_sphere_parameters(Sphere sphere, vec3 coordinate){
+    
+    // The direction of the point relative to the center
+    vec3 p = normalize(coordinate - sphere.center);
+    float theta = acos(clamp(p.z, -1.0, 1.0));
+    float phi = atan(p.y, p.x);
+    if (phi < 0.0) {
+        phi += 2.0 * PI;
+    }
+    float u = theta / PI;
+    float v = phi / (2.0 * PI);
+
+    return vec2(u, v);
+}
+
+
 //=========================|| VISIBILITY FUNCTION ||==========================//
 
 
@@ -290,11 +209,11 @@ Ray_hit ray_tracing_function(
 // and the distance between x and y, as we only care for collisions
 // between x and y.
 float visibility_term(
-    inout Triangle scene[SCENE_SIZE],
+    inout Sphere scene[SCENE_SIZE],
     vec3 x, vec3 y
 ) {
     Ray ray;
-    // We add a small epsilon to avoid self intersection
+    // We add epsilon to avoid self intersection
     ray.dir = normalize(y - x);
     ray.origin = x + ray.dir * EPSILON;
 
@@ -302,7 +221,7 @@ float visibility_term(
 
     // We cast a ray from x to y, and check for any collision
     for(int i = 0; i < SCENE_SIZE; i++){
-        Ray_hit hit = ray_triangle_intersection(scene[i], ray);
+        Ray_hit hit = ray_sphere_intersection(scene[i], ray);
 
         // If there is a hit, and the hit occurs before reaching y
         // (with epsilon to avoid self intersection)
@@ -479,8 +398,8 @@ vec3 emitted_light(
 // Note that uv is the same as x2, but given as local parameters of
 // the surface on which x2 lies.
 Bounce_data light_bounce(
-    inout Triangle scene[SCENE_SIZE], int scene_index_1, 
-    int scene_index_2, vec3 throughput, 
+    inout Sphere scene[SCENE_SIZE], int sphere_index_1, 
+    int sphere_index_2, vec3 throughput, 
     vec3 x0, vec3 x1, vec3 x2, vec2 uv,
     vec3 light_color, float light_intensity
 ){
@@ -488,14 +407,14 @@ Bounce_data light_bounce(
 
     vec3 omega_i = -normalize(x1 - x0);
     vec3 omega_o = -normalize(x1 - x2);
-    vec3 n1 = triangle_normal(scene[scene_index_1], x1);
-    vec3 n2 = triangle_normal(scene[scene_index_2], x2);
+    vec3 n1 = sphere_normal(scene[sphere_index_1], x1);
+    vec3 n2 = sphere_normal(scene[sphere_index_2], x2);
 
-    vec3 reflectance = scene[scene_index_1].reflectance;
-    float roughness = scene[scene_index_1].roughness;
+    vec3 reflectance = scene[sphere_index_1].reflectance;
+    float roughness = scene[sphere_index_1].roughness;
 
     // Shifting points slightly to ensure no self collision with the
-    // inside of the triangle.
+    // inside of the sphere.
     x1 = x1 + n1 * EPSILON;
     x2 = x2 + n2 * EPSILON;
 
@@ -511,15 +430,15 @@ Bounce_data light_bounce(
     result.throughput = throughput;
     result.throughput *= geometry_term(x1, x2, n1, n2);
     result.throughput *= cook_torrance_BRDF(omega_i, omega_o, n1, 
-        scene[scene_index_1].color, reflectance, roughness);
-    result.throughput *= change_of_measure(scene[scene_index_2], uv.x, uv.y);
+        scene[sphere_index_1].color, reflectance, roughness);
+    result.throughput *= change_of_measure(scene[sphere_index_2], uv.x, uv.y);
     result.throughput *= visibility_term(scene, x1, x2);
 
     // If the current sampled point is not on a light source, it
     // contributes no radiance, but future bounce may still 
     // contribute some, so we update the througput but keep the radiance
     // at 0.0. Otherwise we update the radiance.
-    if(scene[scene_index_2].is_light_source){
+    if(scene[sphere_index_2].is_light_source){
         result.radiance = result.throughput 
             * emitted_light(x2, omega_o, light_color, light_intensity);
     }
@@ -534,7 +453,7 @@ Bounce_data light_bounce(
 // Generates several Monte-Carlo samples, that is, several rays of light
 // whose bounces we trace throughout the scene.
 vec3 monte_carlo_sampling(
-    inout Triangle scene[SCENE_SIZE], float total_area,
+    inout Sphere scene[SCENE_SIZE], float total_area,
     int sample_count, int bounce_count,
     vec3 camera_pos, vec3 screen_pos, float frame,
     vec3 light_color, float light_intensity
@@ -589,8 +508,8 @@ vec3 monte_carlo_sampling(
                 light_color, light_intensity);
         }
 
-        int scene_index_1 = hit.index;
-        int scene_index_2;
+        int sphere_index_1 = hit.index;
+        int sphere_index_2;
 
         vec3 x0 = camera_pos;
         vec3 x1 = hit.coordinate;
@@ -606,37 +525,33 @@ vec3 monte_carlo_sampling(
             // proportional to their surphace area.
             float rand = 
                 random(seed(screen_pos.xy, frame, bounce, sample, 0));
-
             float accum = 0.0;
             int chosen_index = 0;
             for(int i = 0; i < SCENE_SIZE; i++) {
-                accum += triangle_area(scene[i]) / total_area;
+                accum += sphere_area(scene[i]) / total_area;
                 if (rand < accum) {
                     chosen_index = i;
                     break;
                 }
             }
-            scene_index_2 = chosen_index;
+            sphere_index_2 = chosen_index;
 
             vec2 uv;
             uv.x = random(seed(screen_pos.xy, frame, bounce, sample, 1));
             uv.y = random(seed(screen_pos.xy, frame, bounce, sample, 2));
-            x2 = triangle_transform(scene[scene_index_2], uv.x, uv.y);
+            x2 = sphere_transform(scene[sphere_index_2], uv.x, uv.y);
 
             Bounce_data data = light_bounce(
-                scene, scene_index_1, scene_index_2, throughput, 
+                scene, sphere_index_1, sphere_index_2, throughput, 
                 x0, x1, x2, uv, light_color, light_intensity
             );
 
             sample_result += data.radiance;
 
-            // A small amount of ambient light
-            sample_result += scene[hit.index].color * AMBIENT_LIGHT;
-
             throughput = data.throughput;
             x0 = x1;
             x1 = x2;
-            scene_index_1 = scene_index_2;
+            sphere_index_1 = sphere_index_2;
         }
         
         final_result += sample_result;
@@ -648,12 +563,6 @@ vec3 monte_carlo_sampling(
 
 
 //============================|| MAIN FUNCTION ||=============================//
-
-
-layout(std140) uniform CubeData {
-    // 12 triangles × 3 vertices = 36 vec4
-    vec4 vertices[36];
-};
 
 
 void main() {
@@ -675,44 +584,45 @@ void main() {
             FragPos.z);
         vec3 view_pos = camera_pos;
 
-        // Light
-        Triangle s1, s2;
+        // The third sphere is the light source
+        Sphere s1, s2, s3, s4;
 
-        s1.v1 = vec3(2.0, 2.0, -4.0);
-        s1.v0 = vec3(-2.0, 2.0, -4.0);
-        s1.v2 = vec3(-2.0, 2.0, 4.0);
-        s1.color = vec3(0.0, 0.0, 1.0);
-        s1.is_light_source = true;
-        s1.roughness = 0.8;
+        s1.center = vec3(0.0, -0.4, 0.0);
+        s1.radius = 0.5;
+        s1.color = vec3(1.0, 0.0, 0.0);
+        s1.roughness = 0.2;
         s1.reflectance = vec3(0.1);
 
-        s2.v1 = vec3(2.0, 2.0, 4.0);
-        s2.v0 = vec3(2.0, 2.0, -4.0);
-        s2.v2 = vec3(-2.0, 2.0, 4.0);
-        s2.color = vec3(0.0, 0.0, 0.0);
-        s2.is_light_source = true;
-        s2.roughness = 0.8;
+        s2.center = vec3(0.0, 0.4, 0.0);
+        s2.radius = 0.25;
+        s2.color = vec3(0.0, 1.0, 0.0);
+        s2.roughness = 0.2;
         s2.reflectance = vec3(0.1);
+    
+        s3.center = vec3(0.15, 0.2, -0.3);
+        s3.radius = 0.15;
+        s3.color = vec3(0.0, 0.0, 1.0);
+        s3.roughness = 0.1;
+        s3.reflectance = vec3(0.3);
+
+        s4.center = vec3(0.0, 10.0, 0.0);
+        s4.radius = 8.0;
+        s4.color = vec3(0.0, 0.0, 0.0);
+        s4.is_light_source = true;
+        s4.roughness = 0.8;
+        s4.reflectance = vec3(0.1);
 
         // The scene contains all of the geometry
-        Triangle scene[SCENE_SIZE];
+        Sphere scene[SCENE_SIZE];
         scene[0] = s1;
         scene[1] = s2;
-        for(int i = 0; i < 12; i++){
-            Triangle s;
-            s.v0 = vertices[0 + i*3].xyz * 0.5 + vec3(0, -0.5, 0);
-            s.v1 = vertices[1 + i*3].xyz * 0.5 + vec3(0, -0.5, 0);
-            s.v2 = vertices[2 + i*3].xyz * 0.5 + vec3(0, -0.5, 0);
-            s.color = vec3(1.0, 0.0, 0.0);
-            s.roughness = 0.1;
-            s.reflectance = vec3(0.1);
-            scene[i + 2] = s;
-        }
+        scene[2] = s3; 
+        scene[3] = s4; 
 
         // Total scene area
         float total_area = 0;
         for(int i = 0; i < SCENE_SIZE; i++){
-            total_area += triangle_area(scene[i]);
+            total_area += sphere_area(scene[i]);
         }
 
         float light_intensity = 2.0;
@@ -724,11 +634,13 @@ void main() {
             view_pos, screen_pos, time,
             light_color, light_intensity
         );
+
+        bool use_average = true;
         
-        // The output is saved onto a texture that becomes
+        // The ouput is saved onto a texture that becomes
         // the next frame's input, as well as the texture displayed in the
         // next pass this frame.
-        if(USE_AVERAGE){
+        if(use_average){
             // Mix with the texture containing accumulated colors.
             vec2 uv = FragPos.xy * 0.5 + vec2(0.5);
             vec3 average_radiance = (radiance + 
