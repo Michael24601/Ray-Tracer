@@ -120,6 +120,43 @@ vec3 triangle_normal(Triangle triangle, vec3 point) {
 }
 
 
+// Returns a point as a linear combination of the three vertices
+// of a triangle.
+vec3 barycentric_coordinates(Triangle triangle, vec3 point) {
+    vec3 v0 = triangle.v1 - triangle.v0;
+    vec3 v1 = triangle.v2 - triangle.v0;
+    vec3 v2 = point - triangle.v0;
+
+    float d00 = dot(v0, v0);
+    float d01 = dot(v0, v1);
+    float d11 = dot(v1, v1);
+    float d20 = dot(v2, v0);
+    float d21 = dot(v2, v1);
+
+    float denom = d00 * d11 - d01 * d01;
+    if (denom == 0.0) {
+        // Degenerate triangle
+        return vec3(0.0);
+    }
+
+    float v = (d11 * d20 - d01 * d21) / denom;
+    float w = (d00 * d21 - d01 * d20) / denom;
+    float u = 1.0 - v - w;
+
+    return vec3(u, v, w);
+}
+
+
+// Returns the triangle normal.
+// Uses the normals of each vertex (in case they are different),
+// coupled with the barycentric weights of the point;
+vec3 triangle_barycentric_normal(Triangle triangle, vec3 point) {
+    vec3 weights = barycentric_coordinates(triangle, point);
+    return normalize(triangle.n0 * weights.x 
+        + triangle.n1 * weights.y + triangle.n2 * weights.z);
+}
+
+
 // Returns the triangle surface area
 float triangle_area(Triangle triangle) {
     vec3 a = triangle.v1 - triangle.v0;
