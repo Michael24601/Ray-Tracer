@@ -24,9 +24,10 @@ uniform int pass;
 #define EPSILON 1e-6
 #define SCENE_SIZE 4
 #define LIMIT 999999
-#define SAMPLE_COUNT 32
+#define SAMPLE_COUNT 256
 #define BOUNCE_COUNT 4
 #define ENABLE_ANTI_ALIASING true
+#define USE_AVERAGE true
 
 
 //===============================||  OBJECTS  ||==============================//
@@ -591,19 +592,19 @@ void main() {
         s1.radius = 0.5;
         s1.color = vec3(1.0, 0.0, 0.0);
         s1.roughness = 0.2;
-        s1.reflectance = vec3(0.1);
+        s1.reflectance = vec3(0.2);
 
         s2.center = vec3(0.0, 0.4, 0.0);
         s2.radius = 0.25;
         s2.color = vec3(0.0, 1.0, 0.0);
         s2.roughness = 0.2;
-        s2.reflectance = vec3(0.1);
+        s2.reflectance = vec3(0.2);
     
         s3.center = vec3(0.15, 0.2, -0.3);
         s3.radius = 0.15;
         s3.color = vec3(0.0, 0.0, 1.0);
-        s3.roughness = 0.1;
-        s3.reflectance = vec3(0.3);
+        s3.roughness = 0.2;
+        s3.reflectance = vec3(0.2);
 
         s4.center = vec3(0.0, 10.0, 0.0);
         s4.radius = 8.0;
@@ -625,7 +626,7 @@ void main() {
             total_area += sphere_area(scene[i]);
         }
 
-        float light_intensity = 4.0;
+        float light_intensity = 1.0;
         // White
         vec3 light_color = vec3(1.0);
 
@@ -634,13 +635,11 @@ void main() {
             view_pos, screen_pos, time,
             light_color, light_intensity
         );
-
-        bool use_average = true;
         
         // The ouput is saved onto a texture that becomes
         // the next frame's input, as well as the texture displayed in the
         // next pass this frame.
-        if(use_average){
+        if(USE_AVERAGE){
             // Mix with the texture containing accumulated colors.
             vec2 uv = FragPos.xy * 0.5 + vec2(0.5);
             vec3 average_radiance = (radiance + 

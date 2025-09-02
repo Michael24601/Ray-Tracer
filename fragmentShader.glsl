@@ -12,8 +12,8 @@ uniform float aspect_ratio;
 uniform vec3 camera_pos;
 // The current time
 uniform float current_time;
-// Number of primitives
-uniform int scene_size;
+// Number of primitives sent from outside
+uniform int primitive_count;
 // The current frame
 uniform int frame;
 
@@ -27,7 +27,7 @@ uniform int pass;
 #define PI 3.14159265358979323846
 #define EPSILON 1e-6
 #define LIMIT 999999
-#define SAMPLE_COUNT 16
+#define SAMPLE_COUNT 64
 #define BOUNCE_COUNT 4
 // Amount of base light added to all objects to avoid black objects
 #define AMBIENT_LIGHT 0.025
@@ -326,7 +326,8 @@ Ray_hit ray_triangle_intersection(Triangle triangle, Ray ray){
 // intersection. It is O(n) for n objects.
 Ray_hit ray_tracing_function(
     inout Triangle scene[MAX_SCENE_SIZE],
-    Ray ray
+    Ray ray, 
+    int scene_size
 ) {
     Ray_hit hit;
     hit.hit = false;
@@ -354,7 +355,8 @@ Ray_hit ray_tracing_function(
 Ray_hit ray_tracing_function(
     inout Triangle scene[MAX_SCENE_SIZE],
     inout BVH_node root,
-    Ray ray
+    Ray ray, 
+    int scene_size
 ) {
     Ray_hit hit;
     hit.hit = false;
@@ -386,7 +388,8 @@ Ray_hit ray_tracing_function(
 // between x and y.
 float visibility_term(
     inout Triangle scene[MAX_SCENE_SIZE],
-    vec3 x, vec3 y
+    vec3 x, vec3 y,
+    int scene_size
 ) {
     Ray ray;
     // We add a small epsilon to avoid self intersection
@@ -577,7 +580,8 @@ Bounce_data light_bounce(
     inout Triangle scene[MAX_SCENE_SIZE], int scene_index_1, 
     int scene_index_2, vec3 throughput, 
     vec3 x0, vec3 x1, vec3 x2, vec2 uv,
-    vec3 light_color, float light_intensity
+    vec3 light_color, float light_intensity,
+    int scene_size
 ){
     Bounce_data result;
 
@@ -608,7 +612,7 @@ Bounce_data light_bounce(
     result.throughput *= cook_torrance_BRDF(omega_i, omega_o, n1, 
         scene[scene_index_1].color, reflectance, roughness);
     result.throughput *= change_of_measure(scene[scene_index_2], uv.x, uv.y);
-    result.throughput *= visibility_term(scene, x1, x2);
+    result.throughput *= visibility_term(scene, x1, x2, scene_size);
 
     // If the current sampled point is not on a light source, it
     // contributes no radiance, but future bounce may still 
@@ -632,7 +636,8 @@ vec3 monte_carlo_sampling(
     inout Triangle scene[MAX_SCENE_SIZE], float total_area,
     int sample_count, int bounce_count,
     vec3 camera_pos, vec3 screen_pos, float frame,
-    vec3 light_color, float light_intensity
+    vec3 light_color, float light_intensity,
+    int scene_size
 ){
     vec3 final_result = vec3(0.0);;
 
@@ -670,7 +675,7 @@ vec3 monte_carlo_sampling(
             ray.dir = normalize(screen_pos - camera_pos);
         }
 
-        Ray_hit hit = ray_tracing_function(scene, ray);
+        Ray_hit hit = ray_tracing_function(scene, ray, scene_size);
         if(!hit.hit){
             continue;
         }
@@ -720,7 +725,8 @@ vec3 monte_carlo_sampling(
 
             Bounce_data data = light_bounce(
                 scene, scene_index_1, scene_index_2, throughput, 
-                x0, x1, x2, uv, light_color, light_intensity
+                x0, x1, x2, uv, light_color, light_intensity,
+                scene_size
             );
 
             sample_result += data.radiance;
@@ -770,6 +776,10 @@ void main() {
             FragPos.z);
         vec3 view_pos = camera_pos;
 
+        // The total number of primitives is the number of primitives sent
+        // the CPU and the ones generated in the shader (the light).
+        int scene_size = primitive_count + 2;
+
         // Light
         Triangle s1, s2;
 
@@ -793,7 +803,7 @@ void main() {
         Triangle scene[MAX_SCENE_SIZE];
         scene[0] = s1;
         scene[1] = s2;
-        for(int i = 0; i < 12; i++){
+        for(int i = 0; i < scene_size; i++){
             Triangle s;
             s.v0 = vertices[0 + i*3].xyz * 0.5 + vec3(0, -0.5, 0);
             s.v1 = vertices[1 + i*3].xyz * 0.5 + vec3(0, -0.5, 0);
@@ -810,14 +820,14 @@ void main() {
             total_area += triangle_area(scene[i]);
         }
 
-        float light_intensity = 2.0;
+        float light_intensity = 1.0;
         // White
         vec3 light_color = vec3(1.0);
 
         vec3 radiance = monte_carlo_sampling(
             scene, total_area, SAMPLE_COUNT, BOUNCE_COUNT,
             view_pos, screen_pos, time,
-            light_color, light_intensity
+            light_color, light_intensity, scene_size
         );
         
         // The output is saved onto a texture that becomes
@@ -833,6 +843,7 @@ void main() {
         else{
             FragColor = vec4(radiance, 1.0);
         }
+
     }
     else if(pass == 1){
 

@@ -25,7 +25,7 @@ void runRayTracer(){
     GlfwWindowWrapper window(1500, 1175, 4, "Window", true);
     float aspectRatio =  (float)window.getWidth() / (float)window.getHeight();
 
-    Shader shader("vertexShader.glsl", "fragmentShader_test.glsl");
+    Shader shader("vertexShader.glsl", "fragmentShader.glsl");
     /*
         We want to define the whole geometry inside the fragment shader,
         so we can just send two triagles to the vertex shader as a
@@ -99,6 +99,9 @@ void runRayTracer(){
         0.5,  0.5,  0.5, 0.0,
         -0.5,  0.5, -0.5, 0.0
     };
+
+    // Number of primitives (triangles)
+    shader.setUniform("primitive_count", 12);
 
     UBOBuffer buffer;
     buffer.allocate(cubeTrianglesPadded.size() * sizeof(float), GL_STATIC_DRAW);
