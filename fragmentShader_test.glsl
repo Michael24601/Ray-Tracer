@@ -625,7 +625,7 @@ void main() {
             total_area += sphere_area(scene[i]);
         }
 
-        float light_intensity = 2.0;
+        float light_intensity = 4.0;
         // White
         vec3 light_color = vec3(1.0);
 

@@ -22,10 +22,10 @@
 
 void runRayTracer(){
 
-    GlfwWindowWrapper window(1000, 750, 4, "Window", true);
+    GlfwWindowWrapper window(1500, 1175, 4, "Window", true);
     float aspectRatio =  (float)window.getWidth() / (float)window.getHeight();
 
-    Shader shader("vertexShader.glsl", "fragmentShader.glsl");
+    Shader shader("vertexShader.glsl", "fragmentShader_test.glsl");
     /*
         We want to define the whole geometry inside the fragment shader,
         so we can just send two triagles to the vertex shader as a

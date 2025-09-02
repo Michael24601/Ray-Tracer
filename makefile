@@ -40,7 +40,7 @@ build/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
 
 run: $(TARGET)
-	start "" $(TARGET)
+	$(TARGET)
 
 clean:
 	del /Q build\*.o $(TARGET)

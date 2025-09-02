@@ -10,7 +10,11 @@ out vec4 FragColor;
 
 uniform float aspect_ratio;
 uniform vec3 camera_pos;
+// The current time
 uniform float current_time;
+// Number of primitives
+uniform int scene_size;
+// The current frame
 uniform int frame;
 
 // We can output each frame onto a texture. Then in the first pass = 0
@@ -22,12 +26,15 @@ uniform int pass;
 
 #define PI 3.14159265358979323846
 #define EPSILON 1e-6
-#define SCENE_SIZE 14
 #define LIMIT 999999
 #define SAMPLE_COUNT 16
 #define BOUNCE_COUNT 4
 // Amount of base light added to all objects to avoid black objects
 #define AMBIENT_LIGHT 0.025
+// Maximum possible BVH tree height
+#define MAX_BVH_HEIGHT 64
+// Maximum possible number of primitives
+#define MAX_SCENE_SIZE 256
 
 #define ENABLE_ANTI_ALIASING true
 #define USE_AVERAGE true
@@ -36,7 +43,7 @@ uniform int pass;
 //===============================||  OBJECTS  ||==============================//
 
 
-// A triangle
+// A triangle primitive
 struct Triangle {
     // We assume that the vertices are given in the counter clockwise
     // order.
@@ -104,6 +111,26 @@ struct Ray_hit {
 struct Bounce_data{
     vec3 radiance;
     vec3 throughput;
+};
+
+
+// This is used for the BVH. The BVH is used to accelerate the
+// intersection of the ray with the list of n primitives, from O(n)
+// to O(log(n)).
+// The tree is stored as an array, with the children given by indexes.
+// The leafs of the BVH also contain objects (primitives), which
+// are reference by an index (used in the Scene[] array). 
+struct BVH_node{
+    // BVH volume
+    vec3 center;
+    vec3 radius;
+
+    // Children
+    int left;
+    int right;
+
+    // Referenced object (-1 if not a leaf or a leaf with no object)
+    int object;
 };
 
 
@@ -292,17 +319,20 @@ Ray_hit ray_triangle_intersection(Triangle triangle, Ray ray){
 }
 
 
+//==========================|| SCENE INTERSECTION ||==========================//
+
+
 // A funtion that casts a ray into the scene, and returns the closest
-// intersection.
+// intersection. It is O(n) for n objects.
 Ray_hit ray_tracing_function(
-    inout Triangle scene[SCENE_SIZE],
+    inout Triangle scene[MAX_SCENE_SIZE],
     Ray ray
 ) {
     Ray_hit hit;
     hit.hit = false;
     hit.t = LIMIT;
     
-    for(int i = 0; i < SCENE_SIZE; i++){
+    for(int i = 0; i < scene_size; i++){
 
         Ray_hit hit_temp = ray_triangle_intersection(scene[i], ray);
         hit_temp.index = i;
@@ -318,6 +348,34 @@ Ray_hit ray_tracing_function(
 }
 
 
+// A function that also checks for the closest intersection
+// between a ray and the scene, but uses the BVH of the scene to
+// accelerate the search. It is O(log(n)) for n objects.
+Ray_hit ray_tracing_function(
+    inout Triangle scene[MAX_SCENE_SIZE],
+    inout BVH_node root,
+    Ray ray
+) {
+    Ray_hit hit;
+    hit.hit = false;
+    hit.t = LIMIT;
+    
+    // We will traverse the BVH. If a parent node's sphere does not
+    // intersect the ray, we won't bother with its children.
+    // If a lead node is determined to be intersecting the ray, then
+    // we check if its referenced primitive (triangle) intersects
+    // the ray, and then return the closest of these hits.
+
+    // Recursion is best avoided in GLSL, so we will instead be using
+    // a stack, with a size equal to that of the maximum height
+    // of the BVH tree.
+
+    
+
+    return hit;
+}
+
+
 //=========================|| VISIBILITY FUNCTION ||==========================//
 
 
@@ -327,7 +385,7 @@ Ray_hit ray_tracing_function(
 // and the distance between x and y, as we only care for collisions
 // between x and y.
 float visibility_term(
-    inout Triangle scene[SCENE_SIZE],
+    inout Triangle scene[MAX_SCENE_SIZE],
     vec3 x, vec3 y
 ) {
     Ray ray;
@@ -338,7 +396,7 @@ float visibility_term(
     float dist = length(x - y);
 
     // We cast a ray from x to y, and check for any collision
-    for(int i = 0; i < SCENE_SIZE; i++){
+    for(int i = 0; i < scene_size; i++){
         Ray_hit hit = ray_triangle_intersection(scene[i], ray);
 
         // If there is a hit, and the hit occurs before reaching y
@@ -516,7 +574,7 @@ vec3 emitted_light(
 // Note that uv is the same as x2, but given as local parameters of
 // the surface on which x2 lies.
 Bounce_data light_bounce(
-    inout Triangle scene[SCENE_SIZE], int scene_index_1, 
+    inout Triangle scene[MAX_SCENE_SIZE], int scene_index_1, 
     int scene_index_2, vec3 throughput, 
     vec3 x0, vec3 x1, vec3 x2, vec2 uv,
     vec3 light_color, float light_intensity
@@ -571,7 +629,7 @@ Bounce_data light_bounce(
 // Generates several Monte-Carlo samples, that is, several rays of light
 // whose bounces we trace throughout the scene.
 vec3 monte_carlo_sampling(
-    inout Triangle scene[SCENE_SIZE], float total_area,
+    inout Triangle scene[MAX_SCENE_SIZE], float total_area,
     int sample_count, int bounce_count,
     vec3 camera_pos, vec3 screen_pos, float frame,
     vec3 light_color, float light_intensity
@@ -646,7 +704,7 @@ vec3 monte_carlo_sampling(
 
             float accum = 0.0;
             int chosen_index = 0;
-            for(int i = 0; i < SCENE_SIZE; i++) {
+            for(int i = 0; i < scene_size; i++) {
                 accum += triangle_area(scene[i]) / total_area;
                 if (rand < accum) {
                     chosen_index = i;
@@ -732,7 +790,7 @@ void main() {
         s2.reflectance = vec3(0.1);
 
         // The scene contains all of the geometry
-        Triangle scene[SCENE_SIZE];
+        Triangle scene[MAX_SCENE_SIZE];
         scene[0] = s1;
         scene[1] = s2;
         for(int i = 0; i < 12; i++){
@@ -748,7 +806,7 @@ void main() {
 
         // Total scene area
         float total_area = 0;
-        for(int i = 0; i < SCENE_SIZE; i++){
+        for(int i = 0; i < scene_size; i++){
             total_area += triangle_area(scene[i]);
         }
 
