@@ -25,7 +25,7 @@ void runRayTracer(){
     GlfwWindowWrapper window(1500, 1175, 4, "Window", true);
     float aspectRatio =  (float)window.getWidth() / (float)window.getHeight();
 
-    Shader shader("vertexShader.glsl", "fragmentShader.glsl");
+    Shader shader("vertexShader.glsl", "fragmentShader_test.glsl");
     /*
         We want to define the whole geometry inside the fragment shader,
         so we can just send two triagles to the vertex shader as a
@@ -50,62 +50,63 @@ void runRayTracer(){
     shader.setUniform("camera_pos", glm::vec3(0, 0, -2));
     shader.setUniform("aspect_ratio", aspectRatio);
 
-    std::vector<float> cubeTrianglesPadded = {
-        -0.5, -0.5, -0.5, 0.0,
-        0.5, -0.5, -0.5, 0.0,
-        0.5,  0.5, -0.5, 0.0,
+    std::vector<float> cubeTriangles = {
+        -0.5f, -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, -0.5f, 0.0f,
+        0.5f,  0.5f, -0.5f, 0.0f,
 
-        0.5,  0.5, -0.5, 0.0,
-        -0.5,  0.5, -0.5, 0.0,
-        -0.5, -0.5, -0.5, 0.0,
+        0.5f,  0.5f, -0.5f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,
 
-        0.5, -0.5,  0.5, 0.0,
-        -0.5, -0.5,  0.5, 0.0,
-        -0.5,  0.5,  0.5, 0.0,
+        0.5f, -0.5f,  0.5f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f,
 
-        -0.5,  0.5,  0.5, 0.0,
-        0.5,  0.5,  0.5, 0.0,
-        0.5, -0.5,  0.5, 0.0,
+        -0.5f,  0.5f,  0.5f, 0.0f,
+        0.5f,  0.5f,  0.5f, 0.0f,
+        0.5f, -0.5f,  0.5f, 0.0f,
 
-        -0.5, -0.5,  0.5, 0.0,
-        -0.5, -0.5, -0.5, 0.0,
-        -0.5,  0.5, -0.5, 0.0,
+        -0.5f, -0.5f,  0.5f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f,
 
-        -0.5,  0.5, -0.5, 0.0,
-        -0.5,  0.5,  0.5, 0.0,
-        -0.5, -0.5,  0.5, 0.0,
+        -0.5f,  0.5f, -0.5f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f,
 
-        0.5, -0.5, -0.5, 0.0,
-        0.5, -0.5,  0.5, 0.0,
-        0.5,  0.5,  0.5, 0.0,
+        0.5f, -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f,  0.5f, 0.0f,
+        0.5f,  0.5f,  0.5f, 0.0f,
 
-        0.5,  0.5,  0.5, 0.0,
-        0.5,  0.5, -0.5, 0.0,
-        0.5, -0.5, -0.5, 0.0,
+        0.5f,  0.5f,  0.5f, 0.0f,
+        0.5f,  0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, -0.5f, 0.0f,
 
-        -0.5, -0.5,  0.5, 0.0,
-        0.5, -0.5,  0.5, 0.0,
-        0.5, -0.5, -0.5, 0.0,
+        -0.5f, -0.5f,  0.5f, 0.0f,
+        0.5f, -0.5f,  0.5f, 0.0f,
+        0.5f, -0.5f, -0.5f, 0.0f,
 
-        0.5, -0.5, -0.5, 0.0,
-        -0.5, -0.5, -0.5, 0.0,
-        -0.5, -0.5,  0.5, 0.0,
+        0.5f, -0.5f, -0.5f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f,
 
-        0.5,  0.5, -0.5, 0.0,
-        -0.5,  0.5, -0.5, 0.0,
-        0.5,  0.5,  0.5, 0.0,
+        0.5f,  0.5f, -0.5f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f,
+        0.5f,  0.5f,  0.5f, 0.0f,
 
-        -0.5,  0.5,  0.5, 0.0,
-        0.5,  0.5,  0.5, 0.0,
-        -0.5,  0.5, -0.5, 0.0
+        -0.5f,  0.5f,  0.5f, 0.0f,
+        0.5f,  0.5f,  0.5f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f
     };
 
     // Number of primitives (triangles)
-    shader.setUniform("primitive_count", 12);
+    shader.setUniform("primitive_count", 
+        static_cast<int>(cubeTriangles.size() / 9)); 
 
-    UBOBuffer buffer;
-    buffer.allocate(cubeTrianglesPadded.size() * sizeof(float), GL_STATIC_DRAW);
-    buffer.uploadData(cubeTrianglesPadded);
+    SSBOBuffer buffer;
+    buffer.allocate(cubeTriangles.size() * sizeof(float), GL_STATIC_DRAW);
+    buffer.uploadData(cubeTriangles);
     buffer.bindToBindingPoint(0);
 
     // This is just a texture, used to save the output and then

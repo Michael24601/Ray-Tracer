@@ -31,7 +31,7 @@ public:
     // Creates and allocate the buffer with given size, in bytes,
     // and a draw type (static or dynamic)
     void allocate(int sizeInBytes, GLenum drawType) {
-        this->usage = usage;
+        this->usage = drawType;
         this->dataSize = sizeInBytes;
 
         glGenBuffers(1, &ssbo);
@@ -45,7 +45,8 @@ public:
     // Upload raw data (you can template this)
     void uploadData(std::vector<float> data) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
-        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, data.size(), data.data());
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, 
+            data.size() * sizeof(float), data.data());
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
         checkGLError();

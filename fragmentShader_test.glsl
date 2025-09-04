@@ -3,7 +3,7 @@
 //=============================||  PARAMETERS  ||=============================//
 
 
-#version 330 core
+#version 430 core
 
 in vec3 FragPos;
 out vec4 FragColor;
@@ -255,9 +255,9 @@ float geometry_term(vec3 x, vec3 y, vec3 nx, vec3 ny){
 // We want our PRNG to output to be completely uncorrelated between
 // pixels, frames, bounces, and samples, and parameter number, 
 // so our seed takes them all into account.
-vec4 seed(vec2 pixel, float frame, int bounce, int sample, int parameter){
+vec4 seed(vec2 pixel, float frame, int bounce, int mt_sample, int parameter){
     return vec4(pixel.x, pixel.y, frame, 
-        parameter * 10000 + bounce * 100 + sample);
+        parameter * 10000 + bounce * 100 + mt_sample);
 }
 
 
@@ -368,7 +368,7 @@ vec3 emitted_light(
 }
 
 
-// Calculates one Monte-Carlo sample of the kth light bounce.
+// Calculates one Monte-Carlo mt_sample of the kth light bounce.
 // We have:
 //  T^kL_e = int_{M^k} [ 
 //      L_e(x_{k+1} from x_k) * product_{k=1}^{n} [ 
@@ -383,7 +383,7 @@ vec3 emitted_light(
 // we have:
 // int_M f(x) dx = int_0^1 int_0^1 f(T(t)) * change_of_measure dt
 // Same for int_{M^k}.
-// We can then get a Monte_Carlo sample:
+// We can then get a Monte_Carlo mt_sample:
 // f(T(t)) * change_of_measure
 // Or in our case:
 //  L_e(T(x_{k+1}) from T(x_k)) * product_{k=1}^{n} [ 
@@ -465,13 +465,13 @@ vec3 monte_carlo_sampling(
     // of 0 values if it doesn't intersect the scene, since this is a
     // background.
     // The primary ray is in principle the same for all samples,
-    // but we will instead recalculate it for each sample, which allows
+    // but we will instead recalculate it for each mt_sample, which allows
     // us to introduce random jitter to the screen_position, which in
     // turn gives us an anti-aliasing effect.
 
     // Otherwise we generate cample_count monte-carlo samples, 
     // each with bouncd_count light bounces.
-    for(int sample = 0; sample < sample_count; sample++){
+    for(int mt_sample = 0; mt_sample < sample_count; mt_sample++){
 
         // The Neumann expansion for one bounce
         vec3 sample_result = vec3(0.0);
@@ -485,9 +485,9 @@ vec3 monte_carlo_sampling(
         // We can introduce anti aliasing by adding some jitter
         // each frame to the primary ray.
             vec3 jitter_val = vec3(
-                random(seed(screen_pos.xy, frame, 0, sample, 0)),
-                random(seed(screen_pos.xy, frame, 0, sample, 1)),
-                random(seed(screen_pos.xy, frame, 0, sample, 2))
+                random(seed(screen_pos.xy, frame, 0, mt_sample, 0)),
+                random(seed(screen_pos.xy, frame, 0, mt_sample, 1)),
+                random(seed(screen_pos.xy, frame, 0, mt_sample, 2))
             ) * 0.005 - vec3(0.0025);
             ray.dir = normalize(screen_pos + jitter_val - camera_pos);
         }
@@ -500,7 +500,7 @@ vec3 monte_carlo_sampling(
             continue;
         }
 
-        // First, for bounce 0, we just want to sample the emitted
+        // First, for bounce 0, we just want to mt_sample the emitted
         // light L_e on the object.
         // This is T^0 L_e
         if(scene[hit.index].is_light_source){
@@ -525,7 +525,7 @@ vec3 monte_carlo_sampling(
             // To ensure no bias, we choose objects with a probability
             // proportional to their surphace area.
             float rand = 
-                random(seed(screen_pos.xy, frame, bounce, sample, 0));
+                random(seed(screen_pos.xy, frame, bounce, mt_sample, 0));
             float accum = 0.0;
             int chosen_index = 0;
             for(int i = 0; i < SCENE_SIZE; i++) {
@@ -538,8 +538,8 @@ vec3 monte_carlo_sampling(
             sphere_index_2 = chosen_index;
 
             vec2 uv;
-            uv.x = random(seed(screen_pos.xy, frame, bounce, sample, 1));
-            uv.y = random(seed(screen_pos.xy, frame, bounce, sample, 2));
+            uv.x = random(seed(screen_pos.xy, frame, bounce, mt_sample, 1));
+            uv.y = random(seed(screen_pos.xy, frame, bounce, mt_sample, 2));
             x2 = sphere_transform(scene[sphere_index_2], uv.x, uv.y);
 
             Bounce_data data = light_bounce(
